@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>내 주문 내역 — 잔재미코딩 굿즈샵</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: #f3f4f6; min-height: 100vh; }
+    header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+    header a { text-decoration: none; font-size: 18px; font-weight: 700; color: #1f2937; }
+    main { max-width: 720px; margin: 32px auto; padding: 0 16px; }
+    h1 { font-size: 22px; font-weight: 700; color: #1f2937; margin-bottom: 24px; }
+
+    .order-card { background: #fff; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
+    .order-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+    .order-id { font-size: 12px; color: #9ca3af; }
+    .order-date { font-size: 13px; color: #6b7280; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .paid { background: #dcfce7; color: #16a34a; }
+    .pending { background: #fef9c3; color: #b45309; }
+    .failed { background: #fee2e2; color: #dc2626; }
+
+    .items { border-top: 1px solid #f3f4f6; padding-top: 14px; }
+    .order-item { display: flex; justify-content: space-between; font-size: 14px; color: #374151; padding: 5px 0; }
+    .order-item .name { flex: 1; }
+    .order-item .qty { color: #9ca3af; margin: 0 12px; }
+    .order-item .price { font-weight: 600; }
+
+    .order-total { border-top: 1px solid #f3f4f6; padding-top: 12px; margin-top: 8px; display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; color: #1f2937; }
+
+    .empty { text-align: center; padding: 80px 16px; color: #9ca3af; }
+    .empty a { color: #3b82f6; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="index.html">🛍 잔재미코딩 굿즈샵</a>
+    <a href="index.html" style="font-size:14px;color:#6b7280;text-decoration:none;">← 쇼핑 계속하기</a>
+  </header>
+  <main>
+    <h1>내 주문 내역</h1>
+    <div id="orders-body"><p class="empty">불러오는 중...</p></div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const statusLabel = { paid: '결제완료', pending: '결제대기', failed: '결제실패' };
+
+    async function init() {
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) { location.href = 'login.html?redirect=orders.html'; return; }
+
+      const { data: orders } = await sb.from('orders')
+        .select('*, order_items(*)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      const body = document.getElementById('orders-body');
+      if (!orders?.length) {
+        body.innerHTML = '<p class="empty">아직 주문 내역이 없습니다.<br><br><a href="index.html">쇼핑하러 가기</a></p>';
+        return;
+      }
+
+      body.innerHTML = orders.map(o => `
+        <div class="order-card">
+          <div class="order-header">
+            <div>
+              <p class="order-id">${o.toss_order_id || o.id}</p>
+              <p class="order-date">${new Date(o.created_at).toLocaleString('ko-KR')}</p>
+            </div>
+            <span class="badge ${o.status}">${statusLabel[o.status] || o.status}</span>
+          </div>
+          <div class="items">
+            ${(o.order_items || []).map(item => `
+              <div class="order-item">
+                <span class="name">${item.product_name}</span>
+                <span class="qty">× ${item.quantity}</span>
+                <span class="price">${(item.price * item.quantity).toLocaleString()}원</span>
+              </div>
+            `).join('')}
+            <div class="order-total">
+              <span>합계</span>
+              <span>${o.total_amount.toLocaleString()}원</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    init();
+  </script>
+</body>
+</html>

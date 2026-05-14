@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>결제 완료 — 잔재미코딩 굿즈샵</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: #f3f4f6; display: flex; flex-direction: column; min-height: 100vh; }
+    header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0 24px; height: 56px; display: flex; align-items: center; }
+    header a { text-decoration: none; font-size: 18px; font-weight: 700; color: #1f2937; }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
+    .card { background: #fff; border-radius: 12px; padding: 48px 40px; width: 100%; max-width: 440px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+    .icon { font-size: 52px; margin-bottom: 16px; }
+    h1 { font-size: 22px; font-weight: 700; color: #1f2937; margin-bottom: 8px; }
+    .sub { font-size: 15px; color: #6b7280; margin-bottom: 28px; }
+    .info-box { background: #f9fafb; border-radius: 8px; padding: 16px 20px; text-align: left; font-size: 14px; color: #374151; line-height: 2; margin-bottom: 28px; }
+    .info-box span { font-weight: 600; }
+    .btn-group { display: flex; gap: 10px; }
+    .btn { flex: 1; padding: 12px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; text-decoration: none; text-align: center; }
+    .btn-primary { background: #3b82f6; color: #fff; border: none; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-outline { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+    .btn-outline:hover { background: #f3f4f6; }
+    .error { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <header><a href="index.html">🛍 잔재미코딩 굿즈샵</a></header>
+  <main>
+    <div class="card" id="content"><p>처리 중...</p></div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    async function handleSuccess() {
+      const params = new URLSearchParams(location.search);
+      const paymentKey = params.get('paymentKey');
+      const orderId = params.get('orderId');
+      const amount = params.get('amount');
+      const content = document.getElementById('content');
+
+      if (!paymentKey || !orderId || !amount) {
+        content.innerHTML = '<p class="error">잘못된 접근입니다.</p>';
+        return;
+      }
+
+      // 주문 상태를 paid로 업데이트
+      const { error } = await sb.from('orders')
+        .update({ status: 'paid', toss_payment_key: paymentKey })
+        .eq('toss_order_id', orderId);
+
+      if (error) {
+        content.innerHTML = `<p class="error">오류가 발생했습니다.<br>${error.message}</p>`;
+        return;
+      }
+
+      // 장바구니 비우기
+      localStorage.removeItem('cart');
+
+      content.innerHTML = `
+        <div class="icon">✅</div>
+        <h1>결제가 완료되었습니다!</h1>
+        <p class="sub">구매해 주셔서 감사합니다 😊</p>
+        <div class="info-box">
+          <div>주문번호 <span>${orderId}</span></div>
+          <div>결제금액 <span>${Number(amount).toLocaleString()}원</span></div>
+        </div>
+        <div class="btn-group">
+          <a href="orders.html" class="btn btn-outline">내 주문 보기</a>
+          <a href="index.html" class="btn btn-primary">쇼핑 계속하기</a>
+        </div>
+      `;
+    }
+
+    handleSuccess();
+  </script>
+</body>
+</html>

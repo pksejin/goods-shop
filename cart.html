@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>장바구니 — 잔재미코딩 굿즈샵</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: #f3f4f6; min-height: 100vh; }
+    header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+    header a { text-decoration: none; font-size: 18px; font-weight: 700; color: #1f2937; }
+    main { max-width: 700px; margin: 32px auto; padding: 0 16px; }
+    h1 { font-size: 22px; font-weight: 700; color: #1f2937; margin-bottom: 24px; }
+
+    .cart-item { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
+    .cart-item img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+    .item-info { flex: 1; }
+    .item-name { font-size: 15px; font-weight: 600; color: #1f2937; margin-bottom: 4px; }
+    .item-price { font-size: 14px; color: #6b7280; }
+    .qty-ctrl { display: flex; align-items: center; gap: 8px; }
+    .qty-btn { width: 28px; height: 28px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+    .qty-btn:hover { background: #f3f4f6; }
+    .qty-num { font-size: 15px; font-weight: 600; min-width: 24px; text-align: center; }
+    .item-subtotal { font-size: 15px; font-weight: 700; color: #1f2937; min-width: 80px; text-align: right; }
+    .del-btn { background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 18px; padding: 4px; }
+    .del-btn:hover { color: #ef4444; }
+
+    .summary { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); margin-top: 16px; }
+    .summary-row { display: flex; justify-content: space-between; font-size: 15px; color: #374151; margin-bottom: 12px; }
+    .summary-row.total { font-size: 18px; font-weight: 700; color: #1f2937; border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 4px; }
+    .pay-btn { width: 100%; padding: 14px; background: #3b82f6; color: #fff; border: none; border-radius: 8px; font-size: 17px; font-weight: 700; cursor: pointer; margin-top: 16px; transition: background .15s; }
+    .pay-btn:hover { background: #2563eb; }
+    .pay-btn:disabled { background: #9ca3af; cursor: default; }
+
+    .empty { text-align: center; padding: 80px 16px; color: #9ca3af; }
+    .empty a { color: #3b82f6; text-decoration: none; }
+    .msg { font-size: 14px; color: #ef4444; margin-top: 8px; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="index.html">🛍 잔재미코딩 굿즈샵</a>
+    <a href="index.html" style="font-size:14px;color:#6b7280;text-decoration:none;">← 계속 쇼핑</a>
+  </header>
+  <main>
+    <h1>장바구니</h1>
+    <div id="cart-body"></div>
+    <p class="msg" id="msg"></p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://js.tosspayments.com/v2/standard"></script>
+  <script src="config.js"></script>
+  <script>
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let products = {};  // {id: product}
+
+    function getCart() { return JSON.parse(localStorage.getItem('cart') || '{}'); }
+    function saveCart(cart) { localStorage.setItem('cart', JSON.stringify(cart)); }
+
+    function setQty(productId, delta) {
+      const cart = getCart();
+      cart[productId] = (cart[productId] || 0) + delta;
+      if (cart[productId] <= 0) delete cart[productId];
+      saveCart(cart);
+      render();
+    }
+
+    function removeItem(productId) {
+      const cart = getCart();
+      delete cart[productId];
+      saveCart(cart);
+      render();
+    }
+
+    async function fetchProducts(ids) {
+      if (!ids.length) return;
+      const { data } = await sb.from('products').select('*').in('id', ids);
+      (data || []).forEach(p => products[p.id] = p);
+    }
+
+    function totalAmount() {
+      const cart = getCart();
+      return Object.entries(cart).reduce((sum, [id, qty]) => {
+        return sum + (products[id]?.price || 0) * qty;
+      }, 0);
+    }
+
+    function render() {
+      const cart = getCart();
+      const ids = Object.keys(cart);
+      const body = document.getElementById('cart-body');
+
+      if (!ids.length) {
+        body.innerHTML = `<p class="empty">장바구니가 비어있습니다.<br><br><a href="index.html">쇼핑 계속하기</a></p>`;
+        return;
+      }
+
+      const items = ids.map(id => {
+        const p = products[id];
+        if (!p) return '';
+        const qty = cart[id];
+        return `
+          <div class="cart-item">
+            <img src="${p.image_url || 'https://placehold.co/72x72/e5e7eb/9ca3af?text=?'}" alt="${p.name}">
+            <div class="item-info">
+              <p class="item-name">${p.name}</p>
+              <p class="item-price">${p.price.toLocaleString()}원</p>
+            </div>
+            <div class="qty-ctrl">
+              <button class="qty-btn" onclick="setQty('${id}', -1)">−</button>
+              <span class="qty-num">${qty}</span>
+              <button class="qty-btn" onclick="setQty('${id}', 1)">+</button>
+            </div>
+            <span class="item-subtotal">${(p.price * qty).toLocaleString()}원</span>
+            <button class="del-btn" onclick="removeItem('${id}')" title="삭제">✕</button>
+          </div>
+        `;
+      }).join('');
+
+      const total = totalAmount();
+      body.innerHTML = items + `
+        <div class="summary">
+          <div class="summary-row"><span>상품 금액</span><span>${total.toLocaleString()}원</span></div>
+          <div class="summary-row"><span>배송비</span><span>무료</span></div>
+          <div class="summary-row total"><span>총 결제금액</span><span>${total.toLocaleString()}원</span></div>
+          <button class="pay-btn" onclick="checkout()">결제하기</button>
+        </div>
+      `;
+    }
+
+    async function checkout() {
+      document.getElementById('msg').textContent = '';
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) {
+        location.href = 'login.html?redirect=cart.html';
+        return;
+      }
+
+      const cart = getCart();
+      const ids = Object.keys(cart);
+      if (!ids.length) return;
+
+      const total = totalAmount();
+      const orderId = 'order_' + Date.now();
+
+      // 주문 생성
+      const { data: order, error: orderErr } = await sb.from('orders').insert({
+        user_id: user.id,
+        total_amount: total,
+        status: 'pending',
+        toss_order_id: orderId,
+      }).select().single();
+
+      if (orderErr) { document.getElementById('msg').textContent = '주문 생성 실패: ' + orderErr.message; return; }
+
+      // 주문 상세 생성
+      const items = ids.map(id => ({
+        order_id: order.id,
+        product_id: id,
+        product_name: products[id].name,
+        price: products[id].price,
+        quantity: cart[id],
+      }));
+      await sb.from('order_items').insert(items);
+
+      // 토스 결제 시작
+      const tossPayments = TossPayments(TOSS_CLIENT_KEY);
+      const payment = tossPayments.payment({ customerKey: user.id });
+
+      await payment.requestPayment({
+        method: 'CARD',
+        amount: { currency: 'KRW', value: total },
+        orderId: orderId,
+        orderName: ids.length === 1
+          ? products[ids[0]].name
+          : `${products[ids[0]].name} 외 ${ids.length - 1}건`,
+        successUrl: location.origin + location.pathname.replace('cart.html', '') + 'success.html',
+        failUrl: location.origin + location.pathname.replace('cart.html', '') + 'cart.html',
+        customerEmail: user.email,
+      });
+    }
+
+    async function init() {
+      const cart = getCart();
+      const ids = Object.keys(cart);
+      if (ids.length) await fetchProducts(ids);
+      render();
+    }
+
+    init();
+  </script>
+</body>
+</html>

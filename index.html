@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>잔재미코딩 굿즈샵</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background: #f3f4f6; min-height: 100vh; }
+
+    /* 헤더 */
+    header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+    .logo { font-size: 18px; font-weight: 700; color: #1f2937; text-decoration: none; }
+    .nav { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+    .nav a { color: #374151; text-decoration: none; }
+    .nav a:hover { color: #3b82f6; }
+    .cart-btn { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; color: #374151; text-decoration: none; }
+    .cart-btn:hover { background: #f3f4f6; }
+    .cart-badge { background: #3b82f6; color: #fff; font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 6px; }
+    .btn-link { background: none; border: none; color: #6b7280; cursor: pointer; font-size: 14px; padding: 0; }
+    .btn-link:hover { color: #374151; }
+
+    /* 히어로 */
+    .hero { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #fff; text-align: center; padding: 56px 16px; }
+    .hero h1 { font-size: 28px; font-weight: 800; margin-bottom: 10px; }
+    .hero p { font-size: 16px; opacity: .85; }
+
+    /* 상품 그리드 */
+    main { max-width: 1000px; margin: 32px auto; padding: 0 16px; }
+    .section-title { font-size: 18px; font-weight: 700; color: #1f2937; margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+    .product-card { background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,0.07); transition: transform .15s, box-shadow .15s; }
+    .product-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+    .product-card img { width: 100%; height: 220px; object-fit: cover; display: block; }
+    .product-info { padding: 18px; }
+    .product-name { font-size: 16px; font-weight: 700; color: #1f2937; margin-bottom: 6px; }
+    .product-desc { font-size: 13px; color: #6b7280; line-height: 1.5; margin-bottom: 14px; }
+    .product-footer { display: flex; align-items: center; justify-content: space-between; }
+    .product-price { font-size: 18px; font-weight: 700; color: #1f2937; }
+    .add-btn { padding: 8px 16px; background: #3b82f6; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s; }
+    .add-btn:hover { background: #2563eb; }
+    .add-btn:disabled { background: #9ca3af; cursor: default; }
+    .stock-out { font-size: 13px; color: #ef4444; font-weight: 600; }
+
+    /* 토스트 알림 */
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1f2937; color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; transition: transform .25s; z-index: 100; }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    .empty { text-align: center; padding: 64px 16px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="logo" href="index.html">🛍 잔재미코딩 굿즈샵</a>
+    <div class="nav" id="nav">
+      <a href="cart.html" class="cart-btn">🛒 장바구니 <span class="cart-badge" id="cart-count">0</span></a>
+    </div>
+  </header>
+
+  <div class="hero">
+    <h1>잔재미코딩 공식 굿즈</h1>
+    <p>좋아하는 강의와 함께하는 특별한 굿즈를 만나보세요</p>
+  </div>
+
+  <main>
+    <p class="section-title">전체 상품</p>
+    <div class="grid" id="grid"><p class="empty">상품을 불러오는 중...</p></div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // 장바구니 (localStorage)
+    function getCart() { return JSON.parse(localStorage.getItem('cart') || '{}'); }
+    function saveCart(cart) { localStorage.setItem('cart', JSON.stringify(cart)); }
+    function cartCount() { return Object.values(getCart()).reduce((s, q) => s + q, 0); }
+    function updateBadge() { document.getElementById('cart-count').textContent = cartCount(); }
+
+    function addToCart(productId) {
+      const cart = getCart();
+      cart[productId] = (cart[productId] || 0) + 1;
+      saveCart(cart);
+      updateBadge();
+      showToast('장바구니에 담았습니다!');
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    async function renderNav() {
+      const { data: { user } } = await sb.auth.getUser();
+      const nav = document.getElementById('nav');
+      if (user) {
+        const { data: profile } = await sb.from('profiles').select('is_admin').eq('id', user.id).single();
+        const adminLink = profile?.is_admin ? '<a href="admin.html">관리자</a>' : '';
+        nav.innerHTML = `
+          <a href="orders.html">내 주문</a>
+          ${adminLink}
+          <a href="cart.html" class="cart-btn">🛒 장바구니 <span class="cart-badge" id="cart-count">${cartCount()}</span></a>
+          <button class="btn-link" onclick="logout()">${user.email.split('@')[0]} 로그아웃</button>
+        `;
+      } else {
+        nav.innerHTML = `
+          <a href="login.html">로그인</a>
+          <a href="signup.html">회원가입</a>
+          <a href="cart.html" class="cart-btn">🛒 장바구니 <span class="cart-badge" id="cart-count">${cartCount()}</span></a>
+        `;
+      }
+    }
+
+    async function renderProducts() {
+      const { data: products, error } = await sb.from('products').select('*').eq('is_active', true).order('created_at');
+      const grid = document.getElementById('grid');
+
+      if (error || !products?.length) {
+        grid.innerHTML = '<p class="empty">등록된 상품이 없습니다.</p>';
+        return;
+      }
+
+      grid.innerHTML = products.map(p => `
+        <div class="product-card">
+          <img src="${p.image_url || 'https://placehold.co/400x400/e5e7eb/9ca3af?text=No+Image'}" alt="${p.name}">
+          <div class="product-info">
+            <p class="product-name">${p.name}</p>
+            <p class="product-desc">${p.description || ''}</p>
+            <div class="product-footer">
+              <span class="product-price">${p.price.toLocaleString()}원</span>
+              ${p.stock > 0
+                ? `<button class="add-btn" onclick="addToCart('${p.id}')">장바구니 담기</button>`
+                : `<span class="stock-out">품절</span>`}
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function logout() {
+      await sb.auth.signOut();
+      location.reload();
+    }
+
+    updateBadge();
+    renderNav();
+    renderProducts();
+  </script>
+</body>
+</html>
