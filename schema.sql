@@ -56,6 +56,12 @@ alter table profiles enable row level security;
 alter table orders enable row level security;
 alter table order_items enable row level security;
 
+-- 관리자 여부를 RLS 우회로 확인하는 함수 (무한 재귀 방지)
+create or replace function is_admin_user()
+returns boolean as $$
+  select exists (select 1 from profiles where id = auth.uid() and is_admin = true)
+$$ language sql security definer stable;
+
 -- products: 누구나 조회 가능 (공개 상품 목록)
 create policy "products_public_select" on products for select using (true);
 
@@ -63,18 +69,14 @@ create policy "products_public_select" on products for select using (true);
 create policy "profiles_own_select" on profiles for select using (auth.uid() = id);
 create policy "profiles_own_update" on profiles for update using (auth.uid() = id);
 -- profiles: 관리자는 전체 조회
-create policy "profiles_admin_select" on profiles for select using (
-  exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin = true)
-);
+create policy "profiles_admin_select" on profiles for select using (is_admin_user());
 
 -- orders: 본인 CRUD
 create policy "orders_own_select" on orders for select using (auth.uid() = user_id);
 create policy "orders_own_insert" on orders for insert with check (auth.uid() = user_id);
 create policy "orders_own_update" on orders for update using (auth.uid() = user_id);
 -- orders: 관리자는 전체 조회
-create policy "orders_admin_select" on orders for select using (
-  exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin = true)
-);
+create policy "orders_admin_select" on orders for select using (is_admin_user());
 
 -- order_items: 본인 주문 것만
 create policy "order_items_own_select" on order_items for select using (
@@ -84,9 +86,7 @@ create policy "order_items_own_insert" on order_items for insert with check (
   exists (select 1 from orders o where o.id = order_items.order_id and o.user_id = auth.uid())
 );
 -- order_items: 관리자는 전체 조회
-create policy "order_items_admin_select" on order_items for select using (
-  exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin = true)
-);
+create policy "order_items_admin_select" on order_items for select using (is_admin_user());
 
 -- 신규 가입 시 profiles 자동 생성 트리거
 create or replace function handle_new_user()
